@@ -8,21 +8,21 @@ JOBS_FILE = "jobs_store.json"
 NEW_JOBS_FILE = "new_jobs_log.json"
 
 
-def load_json(file):
-    if not os.path.exists(file):
+def load_json(path):
+    if not os.path.exists(path):
         return []
-    with open(file, "r") as f:
+    with open(path, "r") as f:
         return json.load(f)
 
 
 @app.route("/")
-def dashboard():
+def home():
     jobs = load_json(JOBS_FILE)
     new_jobs = load_json(NEW_JOBS_FILE)
 
     cities = {}
-    for job in jobs:
-        city = job.get("city", "Unknown")
+    for j in jobs:
+        city = j.get("city", "Unknown")
         cities[city] = cities.get(city, 0) + 1
 
     last_update = jobs[-1]["timestamp"] if jobs else "N/A"
@@ -31,10 +31,10 @@ def dashboard():
     <!doctype html>
     <html>
     <head>
-      <title>Amazon Jobs Monitor</title>
       <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Amazon Jobs Monitor</title>
       <style>
-        body { font-family: Arial; background:#f2f2f2; margin:0 }
+        body { font-family: Arial; background:#f3f3f3; margin:0 }
         .card { background:#fff; margin:10px; padding:15px; border-radius:10px }
         .count { font-size:28px; font-weight:bold }
         table { width:100%; border-collapse:collapse }
@@ -61,10 +61,10 @@ def dashboard():
       <div class="card">
         <h3>📍 Jobs by City</h3>
         <table>
-          {% for city, count in cities.items() %}
+          {% for c, n in cities.items() %}
           <tr>
-            <td>{{ city }}</td>
-            <td style="text-align:right">{{ count }}</td>
+            <td>{{ c }}</td>
+            <td style="text-align:right">{{ n }}</td>
           </tr>
           {% endfor %}
         </table>
@@ -95,3 +95,4 @@ def api_new_jobs():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
+
