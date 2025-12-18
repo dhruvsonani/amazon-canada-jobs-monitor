@@ -1,21 +1,37 @@
-import requests, json, time, os
+import requests
+import json
+import time
+import os
+import random
 from datetime import datetime
 from threading import Thread
+
 import dashboard
+from auth import get_auth_token
 
 API_URL = "https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql"
-HEADERS = {"Content-Type": "application/json"}
 
-# ---- CANADA COORDINATES (ALL PROVINCES) ----
+BASE_HEADERS = {
+    "Content-Type": "application/json",
+    "Accept": "*/*",
+    "Origin": "https://hiring.amazon.ca",
+    "Referer": "https://hiring.amazon.ca/",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+    "Country": "Canada",
+    "iscanary": "false"
+}
+
+# 🇨🇦 Canada-wide coverage
 CANADA_COORDINATES = [
-    (43.6532, -79.3832), (45.4215, -75.6972), (48.3809, -89.2477),
-    (45.5017, -73.5673), (46.8139, -71.2080), (48.4284, -71.0685),
-    (49.2827, -123.1207), (48.4284, -123.3656), (53.9171, -122.7497),
-    (51.0447, -114.0719), (53.5461, -113.4938), (56.7267, -111.3810),
-    (49.8951, -97.1384), (52.1332, -106.6700), (50.4452, -104.6189),
+    (43.6532, -79.3832), (45.4215, -75.6972),
+    (45.5017, -73.5673), (46.8139, -71.2080),
+    (49.2827, -123.1207), (48.4284, -123.3656),
+    (51.0447, -114.0719), (53.5461, -113.4938),
+    (49.8951, -97.1384), (52.1332, -106.6700),
     (44.6488, -63.5752), (45.9636, -66.6431),
     (47.5615, -52.7126), (46.2382, -63.1311),
-    (62.4540, -114.3718), (60.7212, -135.0568), (63.7467, -68.5167)
+    (62.4540, -114.3718), (60.7212, -135.0568),
+    (63.7467, -68.5167)
 ]
 
 PAYLOAD_TEMPLATE = {
@@ -25,13 +41,22 @@ PAYLOAD_TEMPLATE = {
             "locale": "en-CA",
             "country": "Canada",
             "pageSize": 100,
-            "geoQueryClause": None
+            "geoQueryClause": None,
+            "dateFilters": [
+                {
+                    "key": "firstDayOnSite",
+                    "range": {"startDate": "2025-12-18"}
+                }
+            ]
         }
     },
     "query": """query searchJobCardsByLocation($searchJobRequest: SearchJobRequest!) {
         searchJobCardsByLocation(searchJobRequest: $searchJobRequest) {
             jobCards {
-                jobId jobTitle city state
+                jobId
+                jobTitle
+                city
+                state
             }
         }
     }"""
@@ -40,48 +65,82 @@ PAYLOAD_TEMPLATE = {
 JOBS_FILE = "jobs_store.json"
 NEW_JOBS_FILE = "new_jobs_log.json"
 
-if not os.path.exists(JOBS_FILE): open(JOBS_FILE, "w").write("[]")
-if not os.path.exists(NEW_JOBS_FILE): open(NEW_JOBS_FILE, "w").write("[]")
+if not os.path.exists(JOBS_FILE):
+    open(JOBS_FILE, "w").write("[]")
+if not os.path.exists(NEW_JOBS_FILE):
+    open(NEW_JOBS_FILE, "w").write("[]")
 
-seen = set(j["jobId"] for j in json.load(open(JOBS_FILE)))
+seen = {j["jobId"] for j in json.load(open(JOBS_FILE))}
+
 
 def fetch_jobs(lat, lng):
     payload = json.loads(json.dumps(PAYLOAD_TEMPLATE))
     payload["variables"]["searchJobRequest"]["geoQueryClause"] = {
-        "lat": lat, "lng": lng, "unit": "km", "distance": 100
+        "lat": lat,
+        "lng": lng,
+        "unit": "km",
+        "distance": 100
     }
-    r = requests.post(API_URL, headers=HEADERS, json=payload, timeout=30)
-    return r.json()["data"]["searchJobCardsByLocation"]["jobCards"]
 
-def save(jobs):
+    headers = BASE_HEADERS.copy()
+    headers["Authorization"] = get_auth_token()
+
+    r = requests.post(API_URL, headers=headers, json=payload, timeout=30)
+
+    try:
+        data = r.json()
+    except Exception:
+        print("❌ Non-JSON response")
+        return []
+
+    if "errors" in data:
+        print("⚠️ GraphQL error:", data["errors"])
+        return []
+
+    return data["data"]["searchJobCardsByLocation"]["jobCards"]
+
+
+def save_jobs(new_jobs):
     all_jobs = json.load(open(JOBS_FILE))
-    all_jobs.extend(jobs)
+    all_jobs.extend(new_jobs)
     json.dump(all_jobs, open(JOBS_FILE, "w"), indent=2)
 
-def log_new(jobs):
+
+def log_new(new_jobs):
     log = json.load(open(NEW_JOBS_FILE))
-    log.append({"time": datetime.utcnow().isoformat(), "new": jobs})
+    log.append({"time": datetime.utcnow().isoformat(), "new": new_jobs})
     json.dump(log, open(NEW_JOBS_FILE, "w"), indent=2)
+
 
 def crawler():
     while True:
-        new_jobs = []
+        batch = []
+
         for lat, lng in CANADA_COORDINATES:
-            for job in fetch_jobs(lat, lng):
+            jobs = fetch_jobs(lat, lng)
+            for job in jobs:
                 if job["jobId"] not in seen:
                     job["timestamp"] = datetime.utcnow().isoformat()
                     seen.add(job["jobId"])
-                    new_jobs.append(job)
-        if new_jobs:
-            save(new_jobs)
-            log_new(new_jobs)
-            print(f"🆕 {len(new_jobs)} new jobs found")
+                    batch.append(job)
+
+            time.sleep(random.uniform(1.2, 2.8))
+
+        if batch:
+            save_jobs(batch)
+            log_new(batch)
+            print(f"🆕 {len(batch)} new jobs found")
         else:
             print("No new jobs")
+
         time.sleep(1800)  # 30 minutes
 
-# Start dashboard
-Thread(target=dashboard.app.run, kwargs={"host":"0.0.0.0","port":8080}).start()
+
+# Start dashboard server
+Thread(
+    target=dashboard.app.run,
+    kwargs={"host": "0.0.0.0", "port": 8080}
+).start()
 
 # Start crawler
 crawler()
