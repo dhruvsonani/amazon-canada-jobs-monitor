@@ -16,13 +16,13 @@ def load_json(path):
 
 
 @app.route("/")
-def home():
+def dashboard():
     jobs = load_json(JOBS_FILE)
     new_jobs = load_json(NEW_JOBS_FILE)
 
     cities = {}
-    for j in jobs:
-        city = j.get("city", "Unknown")
+    for job in jobs:
+        city = job.get("city", "Unknown")
         cities[city] = cities.get(city, 0) + 1
 
     last_update = jobs[-1]["timestamp"] if jobs else "N/A"
@@ -61,10 +61,10 @@ def home():
       <div class="card">
         <h3>📍 Jobs by City</h3>
         <table>
-          {% for c, n in cities.items() %}
+          {% for city, count in cities.items() %}
           <tr>
-            <td>{{ c }}</td>
-            <td style="text-align:right">{{ n }}</td>
+            <td>{{ city }}</td>
+            <td style="text-align:right">{{ count }}</td>
           </tr>
           {% endfor %}
         </table>
@@ -95,4 +95,3 @@ def api_new_jobs():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
-
