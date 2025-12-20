@@ -6,6 +6,7 @@ app = Flask(__name__)
 
 JOBS_FILE = "jobs_store.json"
 NEW_JOBS_FILE = "new_jobs_log.json"
+LAST_RUN_FILE = "last_run.json"
 
 
 def load_json(path):
@@ -15,17 +16,23 @@ def load_json(path):
         return json.load(f)
 
 
+def get_last_run():
+    if not os.path.exists(LAST_RUN_FILE):
+        return "N/A"
+    with open(LAST_RUN_FILE, "r") as f:
+        return json.load(f).get("last_run", "N/A")
+
+
 @app.route("/")
 def dashboard():
     jobs = load_json(JOBS_FILE)
     new_jobs = load_json(NEW_JOBS_FILE)
+    last_run = get_last_run()
 
     cities = {}
     for job in jobs:
         city = job.get("city", "Unknown")
         cities[city] = cities.get(city, 0) + 1
-
-    last_update = jobs[-1]["timestamp"] if jobs else "N/A"
 
     html = """
     <!doctype html>
@@ -45,7 +52,7 @@ def dashboard():
 
       <div class="card">
         <h2>🇨🇦 Amazon Jobs Monitor</h2>
-        <div>Last update: {{ last_update }}</div>
+        <div>Last check: {{ last_run }} UTC</div>
       </div>
 
       <div class="card">
@@ -79,7 +86,7 @@ def dashboard():
         total=len(jobs),
         new_count=sum(len(x.get("new", [])) for x in new_jobs),
         cities=dict(sorted(cities.items(), key=lambda x: -x[1])),
-        last_update=last_update
+        last_run=last_run
     )
 
 
