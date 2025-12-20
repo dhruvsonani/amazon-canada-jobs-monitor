@@ -7,10 +7,13 @@ from datetime import datetime
 from threading import Thread
 
 import dashboard
-from auth import get_auth_token
 
 API_URL = "https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql"
 
+# ---- REQUIRED ENV TOKEN ----
+AUTH_TOKEN = os.environ.get("AMAZON_AUTH_TOKEN")
+
+# ---- BASE HEADERS (browser-like) ----
 BASE_HEADERS = {
     "Content-Type": "application/json",
     "Accept": "*/*",
@@ -21,7 +24,7 @@ BASE_HEADERS = {
     "iscanary": "false"
 }
 
-# 🇨🇦 Canada-wide coverage
+# ---- CANADA COORDINATES (ALL PROVINCES) ----
 CANADA_COORDINATES = [
     (43.6532, -79.3832), (45.4215, -75.6972),
     (45.5017, -73.5673), (46.8139, -71.2080),
@@ -34,6 +37,7 @@ CANADA_COORDINATES = [
     (63.7467, -68.5167)
 ]
 
+# ---- GRAPHQL PAYLOAD ----
 PAYLOAD_TEMPLATE = {
     "operationName": "searchJobCardsByLocation",
     "variables": {
@@ -62,11 +66,13 @@ PAYLOAD_TEMPLATE = {
     }"""
 }
 
+# ---- STORAGE FILES ----
 JOBS_FILE = "jobs_store.json"
 NEW_JOBS_FILE = "new_jobs_log.json"
 
 if not os.path.exists(JOBS_FILE):
     open(JOBS_FILE, "w").write("[]")
+
 if not os.path.exists(NEW_JOBS_FILE):
     open(NEW_JOBS_FILE, "w").write("[]")
 
@@ -74,6 +80,10 @@ seen = {j["jobId"] for j in json.load(open(JOBS_FILE))}
 
 
 def fetch_jobs(lat, lng):
+    if not AUTH_TOKEN:
+        print("❌ AMAZON_AUTH_TOKEN is missing")
+        return []
+
     payload = json.loads(json.dumps(PAYLOAD_TEMPLATE))
     payload["variables"]["searchJobRequest"]["geoQueryClause"] = {
         "lat": lat,
@@ -83,7 +93,7 @@ def fetch_jobs(lat, lng):
     }
 
     headers = BASE_HEADERS.copy()
-    headers["Authorization"] = get_auth_token()
+    headers["Authorization"] = AUTH_TOKEN
 
     r = requests.post(API_URL, headers=headers, json=payload, timeout=30)
 
@@ -118,13 +128,15 @@ def crawler():
 
         for lat, lng in CANADA_COORDINATES:
             jobs = fetch_jobs(lat, lng)
+
             for job in jobs:
                 if job["jobId"] not in seen:
                     job["timestamp"] = datetime.utcnow().isoformat()
                     seen.add(job["jobId"])
                     batch.append(job)
 
-            time.sleep(random.uniform(1.2, 2.8))
+            # small delay to avoid rate limits
+            time.sleep(random.uniform(1.2, 2.5))
 
         if batch:
             save_jobs(batch)
@@ -133,14 +145,15 @@ def crawler():
         else:
             print("No new jobs")
 
-        time.sleep(1800)  # 30 minutes
+        # wait 30 minutes before next scan
+        time.sleep(1800)
 
 
-# Start dashboard server
+# ---- START DASHBOARD SERVER ----
 Thread(
     target=dashboard.app.run,
     kwargs={"host": "0.0.0.0", "port": 8080}
 ).start()
 
-# Start crawler
+# ---- START CRAWLER ----
 crawler()
