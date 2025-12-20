@@ -11,7 +11,7 @@ import dashboard
 API_URL = "https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql"
 
 # ===============================
-# ENV TOKEN (must be set in Railway)
+# ENV TOKEN (SET IN RAILWAY)
 # ===============================
 AUTH_TOKEN = os.environ.get("AMAZON_AUTH_TOKEN")
 
@@ -25,11 +25,11 @@ BASE_HEADERS = {
     "Referer": "https://hiring.amazon.ca/",
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
     "Country": "Canada",
-    "iscanary": "false"
+    "iscanary": "false",
 }
 
 # ===============================
-# 40 CANADIAN CITIES (lat, lng)
+# ~40 CANADIAN CITIES (lat, lng)
 # ===============================
 CANADA_COORDINATES = [
     # Ontario
@@ -77,11 +77,8 @@ PAYLOAD_TEMPLATE = {
             "pageSize": 100,
             "geoQueryClause": None,
             "dateFilters": [
-                {
-                    "key": "firstDayOnSite",
-                    "range": {"startDate": "2025-12-18"}
-                }
-            ]
+                {"key": "firstDayOnSite", "range": {"startDate": "2025-12-18"}}
+            ],
         }
     },
     "query": """query searchJobCardsByLocation($searchJobRequest: SearchJobRequest!) {
@@ -93,7 +90,7 @@ PAYLOAD_TEMPLATE = {
                 state
             }
         }
-    }"""
+    }""",
 }
 
 # ===============================
@@ -107,10 +104,16 @@ for f in [JOBS_FILE, NEW_JOBS_FILE]:
     if not os.path.exists(f):
         open(f, "w").write("[]")
 
-seen = {j["jobId"] for j in json.load(open(JOBS_FILE))}
+# load seen jobIds (safe if file empty)
+seen = set()
+try:
+    seen = {j.get("jobId") for j in json.load(open(JOBS_FILE)) if j.get("jobId")}
+except Exception:
+    seen = set()
 
 
 def update_last_run():
+    """Heartbeat: ALWAYS write last run time."""
     with open(LAST_RUN_FILE, "w") as f:
         json.dump({"last_run": datetime.utcnow().isoformat()}, f)
 
@@ -125,41 +128,44 @@ def fetch_jobs(lat, lng):
         "lat": lat,
         "lng": lng,
         "unit": "km",
-        "distance": 100
+        "distance": 100,
     }
 
     headers = BASE_HEADERS.copy()
     headers["Authorization"] = AUTH_TOKEN
 
-    r = requests.post(API_URL, headers=headers, json=payload, timeout=30)
-
     try:
+        r = requests.post(API_URL, headers=headers, json=payload, timeout=30)
         data = r.json()
-    except Exception:
-        print("❌ Non-JSON response")
+    except Exception as e:
+        print("❌ Request/JSON error:", e)
         return []
 
     if "errors" in data:
         print("⚠️ GraphQL error:", data["errors"])
         return []
 
-    return data["data"]["searchJobCardsByLocation"]["jobCards"]
+    return data.get("data", {}).get("searchJobCardsByLocation", {}).get("jobCards", [])
 
 
 def crawler():
     while True:
+        # 🔹 HEARTBEAT FIRST — ALWAYS UPDATES TIME
+        update_last_run()
+
         batch = []
 
         for lat, lng in CANADA_COORDINATES:
-            for job in fetch_jobs(lat, lng):
-                if job["jobId"] not in seen:
+            jobs = fetch_jobs(lat, lng)
+            for job in jobs:
+                jid = job.get("jobId")
+                if jid and jid not in seen:
                     job["timestamp"] = datetime.utcnow().isoformat()
-                    seen.add(job["jobId"])
+                    seen.add(jid)
                     batch.append(job)
 
+            # gentle delay to reduce rate limits
             time.sleep(random.uniform(1.2, 2.5))
-
-        update_last_run()
 
         if batch:
             all_jobs = json.load(open(JOBS_FILE))
@@ -183,8 +189,8 @@ def crawler():
 # ===============================
 Thread(
     target=dashboard.app.run,
-    kwargs={"host": "0.0.0.0", "port": 8080}
+    kwargs={"host": "0.0.0.0", "port": 8080},
+    daemon=True,
 ).start()
 
 crawler()
-
