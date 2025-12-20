@@ -19,8 +19,11 @@ def load_json(path):
 def get_last_run():
     if not os.path.exists(LAST_RUN_FILE):
         return "N/A"
-    with open(LAST_RUN_FILE, "r") as f:
-        return json.load(f).get("last_run", "N/A")
+    try:
+        with open(LAST_RUN_FILE, "r") as f:
+            return json.load(f).get("last_run", "N/A")
+    except Exception:
+        return "N/A"
 
 
 @app.route("/")
@@ -86,7 +89,7 @@ def dashboard():
         total=len(jobs),
         new_count=sum(len(x.get("new", [])) for x in new_jobs),
         cities=dict(sorted(cities.items(), key=lambda x: -x[1])),
-        last_run=last_run
+        last_run=last_run,
     )
 
 
