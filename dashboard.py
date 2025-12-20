@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, render_template_string
 import json
 import os
+from datetime import datetime, timezone
 
 app = Flask(__name__)
 
@@ -16,12 +17,27 @@ def load_json(path):
         return json.load(f)
 
 
-def get_last_run():
+def humanize_last_run():
     if not os.path.exists(LAST_RUN_FILE):
         return "N/A"
+
     try:
         with open(LAST_RUN_FILE, "r") as f:
-            return json.load(f).get("last_run", "N/A")
+            ts = json.load(f).get("last_run")
+            if not ts:
+                return "N/A"
+
+        last_run = datetime.fromisoformat(ts).replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        delta = (now - last_run).total_seconds()
+
+        if delta < 60:
+            return f"{int(delta)} seconds ago"
+        elif delta < 3600:
+            return f"{int(delta // 60)} minutes ago"
+        else:
+            return f"{int(delta // 3600)} hours ago"
+
     except Exception:
         return "N/A"
 
@@ -30,7 +46,7 @@ def get_last_run():
 def dashboard():
     jobs = load_json(JOBS_FILE)
     new_jobs = load_json(NEW_JOBS_FILE)
-    last_run = get_last_run()
+    last_check = humanize_last_run()
 
     cities = {}
     for job in jobs:
@@ -55,7 +71,7 @@ def dashboard():
 
       <div class="card">
         <h2>🇨🇦 Amazon Jobs Monitor</h2>
-        <div>Last check: {{ last_run }} UTC</div>
+        <div>Last check: {{ last_check }}</div>
       </div>
 
       <div class="card">
@@ -89,7 +105,7 @@ def dashboard():
         total=len(jobs),
         new_count=sum(len(x.get("new", [])) for x in new_jobs),
         cities=dict(sorted(cities.items(), key=lambda x: -x[1])),
-        last_run=last_run,
+        last_check=last_check,
     )
 
 
