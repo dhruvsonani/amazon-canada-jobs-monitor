@@ -1,2 +1,6 @@
 flask
 requests
+selenium
+webdriver-manager
+requests
+flask
