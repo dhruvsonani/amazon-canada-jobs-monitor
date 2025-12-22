@@ -156,8 +156,9 @@ def get_auth_token():
 
 def fetch_jobs(city, lat, lng):
     headers = BASE_HEADERS.copy()
-    headers["Authorization"] = get_auth_token()
-
+    auth_token = get_auth_token()
+    headers["Authorization"] = str(auth_token).strip()
+    
     payload = json.loads(json.dumps(PAYLOAD_TEMPLATE))
     payload["variables"]["searchJobRequest"]["geoQueryClause"] = {
         "lat": lat,
