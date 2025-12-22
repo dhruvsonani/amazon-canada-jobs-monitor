@@ -7,16 +7,8 @@ from datetime import datetime, timedelta, timezone
 from threading import Thread
 
 import dashboard
-from token_fetcher import fetch_amazon_token
 
 API_URL = "https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql"
-
-# ======================
-# TOKEN MANAGEMENT
-# ======================
-AUTH_TOKEN = None
-TOKEN_LAST_REFRESH = 0
-TOKEN_TTL = 45 * 60  # refresh every 45 minutes
 
 # ======================
 # CONFIG
@@ -151,21 +143,15 @@ def update_run_times():
 
 
 def get_auth_token():
-    global AUTH_TOKEN, TOKEN_LAST_REFRESH
+    token = os.getenv("AMAZON_AUTH_TOKEN")
 
-    now = time.time()
-    if AUTH_TOKEN and now - TOKEN_LAST_REFRESH < TOKEN_TTL:
-        return AUTH_TOKEN
+    if not token:
+        raise RuntimeError(
+            "AMAZON_AUTH_TOKEN is missing. "
+            "Open hiring.amazon.ca in a real browser and paste the Authorization header."
+        )
 
-    print("🔄 Refreshing Amazon auth token via Selenium...")
-    AUTH_TOKEN = fetch_amazon_token()
-    TOKEN_LAST_REFRESH = now
-    print("✅ Token refreshed")
-    if AUTH_TOKEN:
-        return AUTH_TOKEN
-    else:
-        return "eyJhbGciOiJLTVMiLCJ0eXAiOiJKV1QifQ.eyJpYXQiOjE3NjY0MTU5MDMsImV4cCI6MTc2NjQxOTUwM30.AQICAHi0xq7B9FZXTa+xo9jr+4H18qufSuw/fPB9jArceBMx+wEoXIh8zcorSUhlngmr9jYBAAAAtDCBsQYJKoZIhvcNAQcGoIGjMIGgAgEAMIGaBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDPa55oZec8g57GXk1gIBEIBtIZOSoqKDlF38pwDTuX3BWMFcJ3kFR9b0GP3xNV2Wr+rJdOvhe8HshQelwXsLy6nH+CHBMg6ymFXKKraP5StzwwNlrsOssrZBTmmnBr8Hy1Bi1lvSkfovMEEuGTg+gxC4BVjncklj1vuUT/3h+w=="
-
+    return token.strip()
 
 
 def fetch_jobs(city, lat, lng):
@@ -182,11 +168,13 @@ def fetch_jobs(city, lat, lng):
 
     try:
         r = requests.post(API_URL, headers=headers, json=payload, timeout=(10, 30))
+
         if r.status_code != 200:
             log_request(city, f"HTTP_{r.status_code}")
             return []
 
         data = r.json()
+
         if "errors" in data:
             log_request(city, "GRAPHQL_ERROR")
             return []
@@ -197,7 +185,6 @@ def fetch_jobs(city, lat, lng):
     except Exception as e:
         log_request(city, f"REQUEST_FAILED:{type(e).__name__}")
         return []
-
 
 # ======================
 # CRAWLER
@@ -231,7 +218,6 @@ def crawler():
             write_json(NEW_JOBS_FILE, log)
 
         time.sleep(INTERVAL_SECONDS)
-
 
 # ======================
 # START
