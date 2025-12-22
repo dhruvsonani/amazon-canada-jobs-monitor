@@ -1,14 +1,19 @@
 import time
 import json
+import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 
 
 def fetch_amazon_token(timeout=40):
+    # Sanity check (optional but helpful)
+    print("Chromium exists:", os.path.exists("/usr/bin/chromium"))
+    print("Chromedriver exists:", os.path.exists("/usr/bin/chromium-driver"))
+
     chrome_options = Options()
 
-    # IMPORTANT: point to Chromium binary
+    # 🔴 CRITICAL: point Selenium to Chromium binary
     chrome_options.binary_location = "/usr/bin/chromium"
 
     chrome_options.add_argument("--headless=new")
@@ -17,10 +22,12 @@ def fetch_amazon_token(timeout=40):
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
 
+    # Enable network logging
     chrome_options.set_capability(
         "goog:loggingPrefs", {"performance": "ALL"}
     )
 
+    # 🔴 CRITICAL: explicit chromedriver path
     service = Service("/usr/bin/chromium-driver")
 
     driver = webdriver.Chrome(
