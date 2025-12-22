@@ -181,7 +181,7 @@ def crawler():
             print("No new jobs")
 
         # 🔁 RUN EVERY 5 MINUTES
-        time.sleep(300)
+        time.sleep(120)
 
 
 # ===============================
