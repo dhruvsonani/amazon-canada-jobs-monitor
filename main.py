@@ -161,8 +161,11 @@ def get_auth_token():
     AUTH_TOKEN = fetch_amazon_token()
     TOKEN_LAST_REFRESH = now
     print("✅ Token refreshed")
+    if AUTH_TOKEN:
+        return AUTH_TOKEN
+    else
+        return "eyJhbGciOiJLTVMiLCJ0eXAiOiJKV1QifQ.eyJpYXQiOjE3NjY0MTU5MDMsImV4cCI6MTc2NjQxOTUwM30.AQICAHi0xq7B9FZXTa+xo9jr+4H18qufSuw/fPB9jArceBMx+wEoXIh8zcorSUhlngmr9jYBAAAAtDCBsQYJKoZIhvcNAQcGoIGjMIGgAgEAMIGaBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDPa55oZec8g57GXk1gIBEIBtIZOSoqKDlF38pwDTuX3BWMFcJ3kFR9b0GP3xNV2Wr+rJdOvhe8HshQelwXsLy6nH+CHBMg6ymFXKKraP5StzwwNlrsOssrZBTmmnBr8Hy1Bi1lvSkfovMEEuGTg+gxC4BVjncklj1vuUT/3h+w=="
 
-    return AUTH_TOKEN
 
 
 def fetch_jobs(city, lat, lng):
