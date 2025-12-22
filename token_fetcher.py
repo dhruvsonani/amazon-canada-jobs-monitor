@@ -1,27 +1,31 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-from webdriver_manager.chrome import ChromeDriverManager
 import time
 import json
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 
-APPSYNC_HOST = "appsync-api.us-east-1.amazonaws.com"
 
-
-def fetch_amazon_token(timeout=30):
-    caps = DesiredCapabilities.CHROME
-    caps["goog:loggingPrefs"] = {"performance": "ALL"}
+def fetch_amazon_token(timeout=40):
+    """
+    Launches a real headless Chrome browser,
+    opens hiring.amazon.ca,
+    captures the AppSync Authorization header,
+    returns the FULL Bearer token.
+    """
 
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+
+    # ✅ Selenium 4 way of enabling performance logs
+    chrome_options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
 
     driver = webdriver.Chrome(
         ChromeDriverManager().install(),
         options=chrome_options,
-        desired_capabilities=caps
     )
 
     driver.get("https://hiring.amazon.ca")
@@ -30,16 +34,15 @@ def fetch_amazon_token(timeout=30):
     token = None
 
     while time.time() - start < timeout:
-        logs = driver.get_log("performance")
-        for entry in logs:
+        for entry in driver.get_log("performance"):
             try:
                 msg = json.loads(entry["message"])["message"]
                 if msg.get("method") == "Network.requestWillBeSent":
-                    req = msg["params"]["request"]
-                    headers = req.get("headers", {})
+                    headers = msg["params"]["request"].get("headers", {})
                     auth = headers.get("authorization") or headers.get("Authorization")
+
                     if auth and "Status|unauthenticated|Session" in auth:
-                        token = auth
+                        token = auth.strip()
                         break
             except Exception:
                 pass
@@ -52,6 +55,6 @@ def fetch_amazon_token(timeout=30):
     driver.quit()
 
     if not token:
-        raise RuntimeError("Failed to capture Amazon auth token")
+        raise RuntimeError("❌ Failed to capture Amazon auth token")
 
     return token
