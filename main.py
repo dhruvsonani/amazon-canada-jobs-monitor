@@ -18,7 +18,6 @@ INTERVAL_SECONDS = 120  # 2 minutes
 BASE_HEADERS = {
     "accept": "*/*",
     "accept-language": "en-US,en;q=0.9,ru;q=0.8",
-    "authorization": AUTH_TOKEN,
     "cache-control": "no-cache",
     "content-type": "application/json",
     "country": "Canada",
