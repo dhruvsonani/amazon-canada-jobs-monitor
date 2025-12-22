@@ -18,7 +18,7 @@ def find_chromedriver():
     raise RuntimeError("Chromedriver not found")
 
 
-def fetch_amazon_token(timeout=60):
+def fetch_amazon_token(timeout=30):
     print("Chromium exists:", os.path.exists("/usr/bin/chromium"))
 
     chromedriver_path = find_chromedriver()
@@ -44,28 +44,46 @@ def fetch_amazon_token(timeout=60):
         options=chrome_options
     )
 
-    # 1️⃣ Open page
+    # 1️⃣ Load Amazon hiring site
     driver.get("https://hiring.amazon.ca")
-
-    # 2️⃣ Give JS time to bootstrap
     time.sleep(5)
 
-    # 3️⃣ Force scroll to trigger job search
-    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-    time.sleep(2)
-    driver.execute_script("window.scrollTo(0, 0);")
+    # 2️⃣ FORCE AppSync request inside browser
+    driver.execute_script("""
+        fetch("https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql", {
+            method: "POST",
+            headers: {
+                "content-type": "application/json",
+                "accept": "*/*"
+            },
+            body: JSON.stringify({
+                operationName: "searchJobCardsByLocation",
+                variables: {
+                    searchJobRequest: {
+                        locale: "en-CA",
+                        country: "Canada",
+                        pageSize: 1,
+                        geoQueryClause: {
+                            lat: 43.6532,
+                            lng: -79.3832,
+                            unit: "km",
+                            distance: 50
+                        }
+                    }
+                },
+                query: "query searchJobCardsByLocation($searchJobRequest: SearchJobRequest!) { searchJobCardsByLocation(searchJobRequest: $searchJobRequest) { jobCards { jobId } } }"
+            })
+        });
+    """)
 
+    # 3️⃣ Capture Authorization header
     start = time.time()
     token = None
 
-    # 4️⃣ Capture AppSync auth header
     while time.time() - start < timeout:
-        logs = driver.get_log("performance")
-
-        for entry in logs:
+        for entry in driver.get_log("performance"):
             try:
                 msg = json.loads(entry["message"])["message"]
-
                 if msg.get("method") == "Network.requestWillBeSent":
                     req = msg["params"]["request"]
                     headers = req.get("headers", {})
@@ -79,8 +97,7 @@ def fetch_amazon_token(timeout=60):
 
         if token:
             break
-
-        time.sleep(1)
+        time.sleep(0.5)
 
     driver.quit()
 
