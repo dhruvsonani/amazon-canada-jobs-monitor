@@ -2,6 +2,7 @@ import time
 import json
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
 
@@ -20,12 +21,16 @@ def fetch_amazon_token(timeout=40):
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
 
-    # ✅ Selenium 4 way of enabling performance logs
-    chrome_options.set_capability("goog:loggingPrefs", {"performance": "ALL"})
+    # Enable performance logging (Selenium 4 way)
+    chrome_options.set_capability(
+        "goog:loggingPrefs", {"performance": "ALL"}
+    )
+
+    service = Service(ChromeDriverManager().install())
 
     driver = webdriver.Chrome(
-        ChromeDriverManager().install(),
-        options=chrome_options,
+        service=service,
+        options=chrome_options
     )
 
     driver.get("https://hiring.amazon.ca")
