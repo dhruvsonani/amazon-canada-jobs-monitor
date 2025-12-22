@@ -16,13 +16,24 @@ API_URL = "https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.co
 INTERVAL_SECONDS = 120  # 2 minutes
 
 BASE_HEADERS = {
-    "Content-Type": "application/json",
-    "Accept": "*/*",
-    "Origin": "https://hiring.amazon.ca",
-    "Referer": "https://hiring.amazon.ca/",
-    "User-Agent": "Mozilla/5.0",
-    "Country": "Canada",
+    "accept": "*/*",
+    "accept-language": "en-US,en;q=0.9,ru;q=0.8",
+    "authorization": AUTH_TOKEN,
+    "cache-control": "no-cache",
+    "content-type": "application/json",
+    "country": "Canada",
     "iscanary": "false",
+    "origin": "https://hiring.amazon.ca",
+    "pragma": "no-cache",
+    "referer": "https://hiring.amazon.ca/",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "cross-site",
+    "user-agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/143.0.0.0 Safari/537.36"
+    ),
 }
 
 # ======================
