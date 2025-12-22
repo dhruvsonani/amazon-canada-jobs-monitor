@@ -1,5 +1,4 @@
 import time
-import json
 import os
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -33,10 +32,6 @@ def fetch_amazon_token(timeout=30):
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
 
-    chrome_options.set_capability(
-        "goog:loggingPrefs", {"performance": "ALL"}
-    )
-
     service = Service(chromedriver_path)
 
     driver = webdriver.Chrome(
@@ -46,63 +41,28 @@ def fetch_amazon_token(timeout=30):
 
     # 1️⃣ Load Amazon hiring site
     driver.get("https://hiring.amazon.ca")
-    time.sleep(5)
 
-    # 2️⃣ FORCE AppSync request inside browser
-    driver.execute_script("""
-        fetch("https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql", {
-            method: "POST",
-            headers: {
-                "content-type": "application/json",
-                "accept": "*/*"
-            },
-            body: JSON.stringify({
-                operationName: "searchJobCardsByLocation",
-                variables: {
-                    searchJobRequest: {
-                        locale: "en-CA",
-                        country: "Canada",
-                        pageSize: 1,
-                        geoQueryClause: {
-                            lat: 43.6532,
-                            lng: -79.3832,
-                            unit: "km",
-                            distance: 50
-                        }
-                    }
-                },
-                query: "query searchJobCardsByLocation($searchJobRequest: SearchJobRequest!) { searchJobCardsByLocation(searchJobRequest: $searchJobRequest) { jobCards { jobId } } }"
-            })
-        });
-    """)
+    # 2️⃣ Allow frontend JS + Cognito to initialize
+    time.sleep(8)
 
-    # 3️⃣ Capture Authorization header
-    start = time.time()
-    token = None
-
-    while time.time() - start < timeout:
-        for entry in driver.get_log("performance"):
-            try:
-                msg = json.loads(entry["message"])["message"]
-                if msg.get("method") == "Network.requestWillBeSent":
-                    req = msg["params"]["request"]
-                    headers = req.get("headers", {})
-                    auth = headers.get("authorization") or headers.get("Authorization")
-
-                    if auth and "Status|unauthenticated|Session" in auth:
-                        token = auth.strip()
-                        break
-            except Exception:
-                pass
-
-        if token:
-            break
-        time.sleep(0.5)
+    # 3️⃣ Read localStorage directly
+    storage = driver.execute_script("return window.localStorage;")
 
     driver.quit()
 
-    if not token:
-        raise RuntimeError("❌ Failed to capture Amazon auth token")
+    # 4️⃣ Find the AppSync unauth token
+    token = None
+    for key, value in storage.items():
+        if "appsync" in key.lower() or "cognito" in key.lower():
+            if isinstance(value, str) and "eyJ" in value:
+                token = value
+                break
 
-    print("✅ Amazon auth token captured")
-    return token
+    if not token:
+        raise RuntimeError("❌ Failed to capture Amazon auth token from localStorage")
+
+    # 5️⃣ Build Authorization header exactly like browser
+    auth_header = f"Bearer Status|unauthenticated|Session|{token}"
+
+    print("✅ Amazon auth token captured from localStorage")
+    return auth_header
