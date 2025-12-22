@@ -202,8 +202,9 @@ def fetch_jobs(city, lat, lng):
         log_request(city, "OK")
         return data["data"]["searchJobCardsByLocation"]["jobCards"]
 
-    except Exception:
-        log_request(city, "REQUEST_FAILED")
+    except Exception as e:
+        log_request(city, f"REQUEST_FAILED: {type(e).__name__}")
+        print("Request error:", repr(e))
         return []
 
 
