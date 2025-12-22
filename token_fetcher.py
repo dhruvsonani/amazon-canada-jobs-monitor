@@ -15,10 +15,10 @@ def find_chromedriver():
     for path in candidates:
         if os.path.exists(path):
             return path
-    raise RuntimeError("❌ Chromedriver not found in system paths")
+    raise RuntimeError("Chromedriver not found")
 
 
-def fetch_amazon_token(timeout=40):
+def fetch_amazon_token(timeout=60):
     print("Chromium exists:", os.path.exists("/usr/bin/chromium"))
 
     chromedriver_path = find_chromedriver()
@@ -44,17 +44,31 @@ def fetch_amazon_token(timeout=40):
         options=chrome_options
     )
 
+    # 1️⃣ Open page
     driver.get("https://hiring.amazon.ca")
+
+    # 2️⃣ Give JS time to bootstrap
+    time.sleep(5)
+
+    # 3️⃣ Force scroll to trigger job search
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    time.sleep(2)
+    driver.execute_script("window.scrollTo(0, 0);")
 
     start = time.time()
     token = None
 
+    # 4️⃣ Capture AppSync auth header
     while time.time() - start < timeout:
-        for entry in driver.get_log("performance"):
+        logs = driver.get_log("performance")
+
+        for entry in logs:
             try:
                 msg = json.loads(entry["message"])["message"]
+
                 if msg.get("method") == "Network.requestWillBeSent":
-                    headers = msg["params"]["request"].get("headers", {})
+                    req = msg["params"]["request"]
+                    headers = req.get("headers", {})
                     auth = headers.get("authorization") or headers.get("Authorization")
 
                     if auth and "Status|unauthenticated|Session" in auth:
@@ -73,4 +87,5 @@ def fetch_amazon_token(timeout=40):
     if not token:
         raise RuntimeError("❌ Failed to capture Amazon auth token")
 
+    print("✅ Amazon auth token captured")
     return token
