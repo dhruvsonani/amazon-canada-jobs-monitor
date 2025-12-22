@@ -6,14 +6,25 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 
 
+def find_chromedriver():
+    candidates = [
+        "/usr/bin/chromedriver",
+        "/usr/lib/chromium/chromedriver",
+        "/usr/lib/chromium-browser/chromedriver",
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    raise RuntimeError("❌ Chromedriver not found in system paths")
+
+
 def fetch_amazon_token(timeout=40):
-    # Sanity check (optional but helpful)
     print("Chromium exists:", os.path.exists("/usr/bin/chromium"))
-    print("Chromedriver exists:", os.path.exists("/usr/bin/chromium-driver"))
+
+    chromedriver_path = find_chromedriver()
+    print("Using chromedriver:", chromedriver_path)
 
     chrome_options = Options()
-
-    # 🔴 CRITICAL: point Selenium to Chromium binary
     chrome_options.binary_location = "/usr/bin/chromium"
 
     chrome_options.add_argument("--headless=new")
@@ -22,13 +33,11 @@ def fetch_amazon_token(timeout=40):
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
 
-    # Enable network logging
     chrome_options.set_capability(
         "goog:loggingPrefs", {"performance": "ALL"}
     )
 
-    # 🔴 CRITICAL: explicit chromedriver path
-    service = Service("/usr/bin/chromium-driver")
+    service = Service(chromedriver_path)
 
     driver = webdriver.Chrome(
         service=service,
