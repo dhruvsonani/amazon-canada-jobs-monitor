@@ -7,117 +7,128 @@ app = Flask(__name__)
 
 JOBS_FILE = "jobs_store.json"
 NEW_JOBS_FILE = "new_jobs_log.json"
+REQUEST_LOG_FILE = "request_log.json"
 LAST_RUN_FILE = "last_run.json"
+NEXT_RUN_FILE = "next_run.json"
 
 
-def load_json(path):
+def load(path, default):
     if not os.path.exists(path):
-        return []
-    with open(path, "r") as f:
-        return json.load(f)
+        return default
+    return json.load(open(path))
 
 
-def humanize_last_run():
-    if not os.path.exists(LAST_RUN_FILE):
+def human_ago(ts):
+    t = datetime.fromisoformat(ts).replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    sec = int((now - t).total_seconds())
+    if sec < 60:
+        return f"{sec} sec ago"
+    return f"{sec // 60} min ago"
+
+
+def next_run_seconds():
+    if not os.path.exists(NEXT_RUN_FILE):
         return "N/A"
+    t = datetime.fromisoformat(load(NEXT_RUN_FILE, {})["next_run"]).replace(tzinfo=timezone.utc)
+    return max(0, int((t - datetime.now(timezone.utc)).total_seconds()))
 
-    try:
-        with open(LAST_RUN_FILE, "r") as f:
-            ts = json.load(f).get("last_run")
-            if not ts:
-                return "N/A"
 
-        last_run = datetime.fromisoformat(ts).replace(tzinfo=timezone.utc)
-        now = datetime.now(timezone.utc)
-        delta = (now - last_run).total_seconds()
+def calculate_health(logs, window=50):
+    if not logs:
+        return 0, "N/A"
+    recent = logs[:window]
+    ok = sum(1 for r in recent if r["status"] == "OK")
+    score = int((ok / len(recent)) * 100)
 
-        if delta < 60:
-            return f"{int(delta)} seconds ago"
-        elif delta < 3600:
-            return f"{int(delta // 60)} minutes ago"
-        else:
-            return f"{int(delta // 3600)} hours ago"
+    if score >= 90:
+        label = "Healthy"
+    elif score >= 70:
+        label = "Degraded"
+    else:
+        label = "Unhealthy"
 
-    except Exception:
-        return "N/A"
+    return score, label
 
 
 @app.route("/")
 def dashboard():
-    jobs = load_json(JOBS_FILE)
-    new_jobs = load_json(NEW_JOBS_FILE)
-    last_check = humanize_last_run()
+    jobs = load(JOBS_FILE, [])
+    new_jobs = load(NEW_JOBS_FILE, [])
+    logs = load(REQUEST_LOG_FILE, [])[::-1][:100]
 
-    cities = {}
-    for job in jobs:
-        city = job.get("city", "Unknown")
-        cities[city] = cities.get(city, 0) + 1
+    last_check = human_ago(load(LAST_RUN_FILE, {}).get("last_run")) if os.path.exists(LAST_RUN_FILE) else "N/A"
+    next_run = next_run_seconds()
+
+    health_score, health_label = calculate_health(logs)
 
     html = """
-    <!doctype html>
-    <html>
-    <head>
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>Amazon Jobs Monitor</title>
-      <style>
-        body { font-family: Arial; background:#f3f3f3; margin:0 }
-        .card { background:#fff; margin:10px; padding:15px; border-radius:10px }
-        .count { font-size:28px; font-weight:bold }
-        table { width:100%; border-collapse:collapse }
-        td { padding:6px 0; border-bottom:1px solid #eee }
-      </style>
-    </head>
-    <body>
+    <html><head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+      body { font-family: Arial; background:#f3f3f3 }
+      .card { background:#fff; margin:10px; padding:15px; border-radius:10px }
+      .ok { color:green }
+      .err { color:red }
+      .warn { color:orange }
+      table { width:100% }
+    </style>
+    </head><body>
 
-      <div class="card">
-        <h2>🇨🇦 Amazon Jobs Monitor</h2>
-        <div>Last check: {{ last_check }}</div>
+    <div class="card">
+      <h2>🇨🇦 Amazon Jobs Monitor</h2>
+      <div>Last check: {{ last_check }}</div>
+      <div>Next run in: {{ next_run }} seconds</div>
+      <div>
+        Request health:
+        <b style="color:{% if health_label=='Healthy' %}green{% elif health_label=='Degraded' %}orange{% else %}red{% endif %}">
+          {{ health_score }}% ({{ health_label }})
+        </b>
       </div>
+    </div>
 
-      <div class="card">
-        <div class="count">{{ total }}</div>
-        <div>Total jobs collected</div>
-      </div>
+    <div class="card">
+      <b>Total jobs:</b> {{ total }}<br>
+      <b>New jobs:</b> {{ new_count }}
+    </div>
 
-      <div class="card">
-        <div class="count">{{ new_count }}</div>
-        <div>New jobs detected</div>
-      </div>
-
-      <div class="card">
-        <h3>📍 Jobs by City</h3>
+    <div class="card">
+      <h3>🧾 Request Status</h3>
+      <div style="max-height:300px; overflow-y:auto">
         <table>
-          {% for city, count in cities.items() %}
+          {% for r in logs %}
           <tr>
-            <td>{{ city }}</td>
-            <td style="text-align:right">{{ count }}</td>
+            <td>{{ r.time.split("T")[1][:8] }}</td>
+            <td>{{ r.city }}</td>
+            <td class="{% if r.status=='OK' %}ok{% elif 'HTTP' in r.status %}err{% else %}warn{% endif %}">
+              {{ r.status }}
+            </td>
           </tr>
           {% endfor %}
         </table>
       </div>
+    </div>
 
-    </body>
-    </html>
+    </body></html>
     """
 
     return render_template_string(
         html,
-        total=len(jobs),
-        new_count=sum(len(x.get("new", [])) for x in new_jobs),
-        cities=dict(sorted(cities.items(), key=lambda x: -x[1])),
         last_check=last_check,
+        next_run=next_run,
+        health_score=health_score,
+        health_label=health_label,
+        total=len(jobs),
+        new_count=sum(len(x["new"]) for x in new_jobs),
+        logs=logs,
     )
 
 
 @app.route("/api/jobs")
 def api_jobs():
-    return jsonify(load_json(JOBS_FILE))
-
-
-@app.route("/api/new-jobs")
-def api_new_jobs():
-    return jsonify(load_json(NEW_JOBS_FILE))
+    return jsonify(load(JOBS_FILE, []))
 
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
+
