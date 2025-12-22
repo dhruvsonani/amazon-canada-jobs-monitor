@@ -184,7 +184,7 @@ def fetch_jobs(city, lat, lng):
     }
 
     headers = BASE_HEADERS.copy()
-    headers["Authorization"] = AUTH_TOKEN
+    headers["Authorization"] = str(AUTH_TOKEN).strip()
 
     try:
         r = requests.post(API_URL, headers=headers, json=payload, timeout=30)
