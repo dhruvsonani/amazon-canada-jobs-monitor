@@ -13,7 +13,7 @@ API_URL = "https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.co
 # ======================
 # CONFIG
 # ======================
-INTERVAL_SECONDS = 120  # 2 minutes
+INTERVAL_SECONDS = 210  # 3.5 minutes
 
 BASE_HEADERS = {
     "accept": "*/*",
