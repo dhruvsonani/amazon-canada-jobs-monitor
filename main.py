@@ -3,8 +3,6 @@ import json
 import time
 import os
 import random
-import smtplib
-from email.message import EmailMessage
 from datetime import datetime, timedelta, timezone
 from threading import Thread
 
@@ -24,15 +22,6 @@ NEXT_RUN_FILE = "next_run.json"
 SLEEP_STATE_FILE = "sleep_state.json"
 
 # ======================
-# EMAIL CONFIG (NO SILENT DISABLE)
-# ======================
-SMTP_HOST = "smtp.office365.com"
-SMTP_PORT = 587
-SMTP_USER = os.getenv("ALERT_EMAIL_USER")
-SMTP_PASS = os.getenv("ALERT_EMAIL_PASS")
-SMTP_TO = os.getenv("ALERT_EMAIL_TO")
-
-# ======================
 # INIT FILES
 # ======================
 for f, default in [
@@ -43,8 +32,9 @@ for f, default in [
     if not os.path.exists(f):
         json.dump(default, open(f, "w"))
 
-if not os.path.exists(SLEEP_STATE_FILE):
-    json.dump({}, open(SLEEP_STATE_FILE, "w"))
+# ⚠️ IMPORTANT: Railway redeploy = resume
+# Always clear sleep state on startup
+json.dump({}, open(SLEEP_STATE_FILE, "w"))
 
 # ======================
 # CITIES
@@ -77,7 +67,10 @@ def log_request(city, status):
 def update_run_times():
     now = datetime.now(timezone.utc)
     write_json(LAST_RUN_FILE, {"last_run": now.isoformat()})
-    write_json(NEXT_RUN_FILE, {"next_run": (now + timedelta(seconds=INTERVAL_SECONDS)).isoformat()})
+    write_json(
+        NEXT_RUN_FILE,
+        {"next_run": (now + timedelta(seconds=INTERVAL_SECONDS)).isoformat()},
+    )
 
 
 def get_auth_token():
@@ -88,25 +81,35 @@ def get_auth_token():
 
 
 # ======================
-# EMAIL (FORCED + LOGGED)
+# EMAIL (SENDGRID – HTTPS SAFE)
 # ======================
 def send_email(subject, body):
     try:
-        if not SMTP_USER or not SMTP_PASS or not SMTP_TO:
-            raise RuntimeError("SMTP env vars missing")
+        api_key = os.getenv("SENDGRID_API_KEY")
+        to_email = os.getenv("ALERT_EMAIL_TO")
 
-        msg = EmailMessage()
-        msg["Subject"] = subject
-        msg["From"] = SMTP_USER
-        msg["To"] = SMTP_TO
-        msg.set_content(body)
+        if not api_key or not to_email:
+            raise RuntimeError("SendGrid env vars missing")
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=20) as s:
-            s.starttls()
-            s.login(SMTP_USER, SMTP_PASS)
-            s.send_message(msg)
+        payload = {
+            "personalizations": [{"to": [{"email": to_email}]}],
+            "from": {"email": "alerts@monitor.local"},
+            "subject": subject,
+            "content": [{"type": "text/plain", "value": body}],
+        }
 
-        print("📧 Email sent successfully")
+        r = requests.post(
+            "https://api.sendgrid.com/v3/mail/send",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=15,
+        )
+
+        if r.status_code not in (200, 202):
+            raise RuntimeError(f"SendGrid HTTP {r.status_code}")
 
     except Exception as e:
         print("❌ EMAIL FAILED:", repr(e))
@@ -114,14 +117,14 @@ def send_email(subject, body):
 
 
 # ======================
-# SLEEP STATE
+# SLEEP STATE (403)
 # ======================
 def get_sleep_state():
     return json.load(open(SLEEP_STATE_FILE))
 
 
-def set_sleep_state(token):
-    hours = random.randint(6, 12)
+def set_sleep_state():
+    hours = random.randint(1, 2)
     now = datetime.now(timezone.utc)
 
     state = {
@@ -129,44 +132,34 @@ def set_sleep_state(token):
         "reason": "403",
         "since": now.isoformat(),
         "wake_at": (now + timedelta(hours=hours)).isoformat(),
-        "token_snapshot": token,
+        "note": "Update token and redeploy Railway to resume",
     }
     write_json(SLEEP_STATE_FILE, state)
 
     send_email(
         "⚠️ Amazon Jobs Monitor – Sleeping (403)",
-        f"""403 detected.
+        f"""
+403 detected.
 
 System sleeping for {hours} hours.
-Will resume automatically if token changes.
+Update AMAZON_AUTH_TOKEN in Railway and redeploy to resume.
 
 Time: {now.isoformat()}
-"""
+""",
     )
 
 
-def clear_sleep_state():
-    write_json(SLEEP_STATE_FILE, {})
+def sleep_if_needed():
+    state = get_sleep_state()
+    if not state.get("sleeping"):
+        return False
 
+    if datetime.now(timezone.utc) >= datetime.fromisoformat(state["wake_at"]):
+        write_json(SLEEP_STATE_FILE, {})
+        return False
 
-def sleep_or_resume():
-    while True:
-        state = get_sleep_state()
-        if not state.get("sleeping"):
-            return
-
-        current_token = os.getenv("AMAZON_AUTH_TOKEN", "").strip()
-        if current_token and current_token != state.get("token_snapshot"):
-            print("🔓 Token updated — resuming immediately")
-            clear_sleep_state()
-            return
-
-        if datetime.now(timezone.utc) >= datetime.fromisoformat(state["wake_at"]):
-            print("⏰ Sleep window expired — resuming")
-            clear_sleep_state()
-            return
-
-        time.sleep(60)
+    time.sleep(300)  # wait 5 minutes
+    return True
 
 
 # ======================
@@ -209,7 +202,7 @@ def fetch_jobs(city, lat, lng):
     r = requests.post(API_URL, headers=headers, json=payload, timeout=(10, 30))
 
     if r.status_code == 403:
-        set_sleep_state(token)
+        set_sleep_state()
         log_request(city, "403_SLEEP")
         return []
 
@@ -228,8 +221,7 @@ def crawler():
     seen = set(j.get("jobId") for j in json.load(open(JOBS_FILE)) if j.get("jobId"))
 
     while True:
-        if get_sleep_state().get("sleeping"):
-            sleep_or_resume()
+        if sleep_if_needed():
             continue
 
         update_run_times()
