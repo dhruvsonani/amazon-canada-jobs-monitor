@@ -1,13 +1,10 @@
 from flask import Flask, render_template_string
 import json
 import os
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 app = Flask(__name__)
-IST = ZoneInfo("Asia/Kolkata")
 
-AUTH_STATE_FILE = "auth_state.json"
+SLEEP_STATE_FILE = "sleep_state.json"
 REQUEST_LOG_FILE = "request_log.json"
 JOBS_FILE = "jobs_store.json"
 NEW_JOBS_FILE = "new_jobs_log.json"
@@ -22,21 +19,9 @@ def load_json(path, default):
         return default
 
 
-def human_ago(ts):
-    if not ts:
-        return "N/A"
-    t = datetime.fromisoformat(ts).astimezone(IST)
-    diff = int((datetime.now(IST) - t).total_seconds())
-    if diff < 60:
-        return f"{diff}s ago"
-    if diff < 3600:
-        return f"{diff//60}m ago"
-    return f"{diff//3600}h ago"
-
-
 @app.route("/")
 def dashboard():
-    auth = load_json(AUTH_STATE_FILE, {})
+    sleep_state = load_json(SLEEP_STATE_FILE, {})
     logs = load_json(REQUEST_LOG_FILE, [])[::-1][:50]
     jobs = load_json(JOBS_FILE, [])
     new_jobs = load_json(NEW_JOBS_FILE, [])
@@ -48,12 +33,12 @@ def dashboard():
     </head>
     <body style="font-family:Arial;background:#f3f3f3">
 
-    {% if auth.state == 'paused' %}
+    {% if sleep_state.sleeping %}
     <div style="background:#ffe5e5;padding:15px;border:2px solid red">
-      <h3>⛔ MONITOR PAUSED</h3>
-      <div>Status: {{ auth.status }}</div>
-      <div>Time: {{ auth.time }}</div>
-      <b>Update AMAZON_AUTH_TOKEN — auto resume enabled</b>
+      <h3>😴 SYSTEM SLEEPING (403)</h3>
+      <div>Since: {{ sleep_state.since }}</div>
+      <div>Wake at: {{ sleep_state.wake_at }}</div>
+      <b>Auto-resume if token changes</b>
     </div>
     {% endif %}
 
@@ -75,7 +60,7 @@ def dashboard():
 
     return render_template_string(
         html,
-        auth=auth,
+        sleep_state=sleep_state,
         total=len(jobs),
         new_count=sum(len(x.get("new", [])) for x in new_jobs),
         logs=logs,
