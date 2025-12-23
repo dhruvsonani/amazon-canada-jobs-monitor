@@ -11,6 +11,8 @@ import dashboard
 API_URL = "https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql"
 INTERVAL_SECONDS = 210
 
+BASE_HEADERS = { "accept": "*/*", "accept-language": "en-US,en;q=0.9,ru;q=0.8", "cache-control": "no-cache", "content-type": "application/json", "country": "Canada", "iscanary": "false", "origin": "https://hiring.amazon.ca", "pragma": "no-cache", "referer": "https://hiring.amazon.ca/", "sec-fetch-dest": "empty", "sec-fetch-mode": "cors", "sec-fetch-site": "cross-site", "user-agent": ( "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " "AppleWebKit/537.36 (KHTML, like Gecko) " "Chrome/143.0.0.0 Safari/537.36" ), }
+
 # ======================
 # FILES
 # ======================
@@ -160,16 +162,9 @@ def sleep_if_needed():
 # FETCH
 # ======================
 def fetch_jobs(city, lat, lng):
-    token = get_auth_token()
-
-    headers = {
-        "content-type": "application/json",
-        "country": "Canada",
-        "origin": "https://hiring.amazon.ca",
-        "referer": "https://hiring.amazon.ca/",
-        "user-agent": "Mozilla/5.0",
-        "Authorization": token,
-    }
+    headers = BASE_HEADERS.copy() 
+    token = get_auth_token() 
+    headers["Authorization"] = str(auth_token).strip()
 
     payload = {
         "operationName": "searchJobCardsByLocation",
