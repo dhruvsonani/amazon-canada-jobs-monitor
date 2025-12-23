@@ -11,6 +11,62 @@ from threading import Thread
 
 import dashboard
 
+# ======================
+# CANADIAN CITIES
+# ======================
+CANADA_CITIES = [
+    ("Toronto", 43.6532, -79.3832),
+    ("Ottawa", 45.4215, -75.6972),
+    ("Mississauga", 43.5890, -79.6441),
+    ("Brampton", 43.7315, -79.7624),
+    ("Hamilton", 43.2557, -79.8711),
+    ("Kitchener", 43.4516, -80.4925),
+    ("Waterloo", 43.4643, -80.5204),
+    ("London", 42.9849, -81.2453),
+    ("Windsor", 42.3149, -83.0364),
+    ("Barrie", 44.3894, -79.6903),
+    ("Kingston", 44.2312, -76.4860),
+    ("Oshawa", 43.8971, -78.8658),
+    ("Thunder Bay", 48.3809, -89.2477),
+
+    ("Montreal", 45.5017, -73.5673),
+    ("Laval", 45.5369, -73.5107),
+    ("Longueuil", 45.5312, -73.5181),
+    ("Quebec City", 46.8139, -71.2080),
+    ("Gatineau", 45.4765, -75.7013),
+    ("Sherbrooke", 45.4042, -71.8929),
+    ("Trois-Rivières", 46.3430, -72.5479),
+    ("Saguenay", 48.4284, -71.0685),
+
+    ("Vancouver", 49.2827, -123.1207),
+    ("Surrey", 49.1913, -122.8490),
+    ("Burnaby", 49.2488, -122.9805),
+    ("Richmond", 49.1666, -123.1336),
+    ("Coquitlam", 49.2838, -122.7932),
+    ("Victoria", 48.4284, -123.3656),
+    ("Kelowna", 49.8880, -119.4960),
+    ("Prince George", 53.9171, -122.7497),
+
+    ("Calgary", 51.0447, -114.0719),
+    ("Edmonton", 53.5461, -113.4938),
+    ("Red Deer", 52.2681, -113.8112),
+    ("Lethbridge", 49.6956, -112.8451),
+    ("Medicine Hat", 50.0405, -110.6766),
+    ("Fort McMurray", 56.7267, -111.3810),
+    ("Grande Prairie", 55.1707, -118.7947),
+
+    ("Winnipeg", 49.8951, -97.1384),
+    ("Brandon", 50.4452, -99.9501),
+    ("Saskatoon", 52.1332, -106.6700),
+    ("Regina", 50.4452, -104.6189),
+    ("Halifax", 44.6488, -63.5752),
+    ("Moncton", 46.0878, -64.7782),
+    ("St. John's", 47.5615, -52.7126),
+    ("Whitehorse", 60.7212, -135.0568),
+    ("Yellowknife", 62.4540, -114.3718),
+]
+
+
 API_URL = "https://e5mquma77feepi2bdn4d6h3mpu.appsync-api.us-east-1.amazonaws.com/graphql"
 
 INTERVAL_SECONDS = 210  # 3.5 minutes
