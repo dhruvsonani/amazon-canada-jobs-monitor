@@ -29,7 +29,7 @@ def dashboard():
     html = """
     <html>
     <head>
-      <meta http-equiv="refresh" content="10">
+      <meta http-equiv="refresh" content="15">
     </head>
     <body style="font-family:Arial;background:#f3f3f3">
 
@@ -38,7 +38,7 @@ def dashboard():
       <h3>😴 SYSTEM SLEEPING (403)</h3>
       <div>Since: {{ sleep_state.since }}</div>
       <div>Wake at: {{ sleep_state.wake_at }}</div>
-      <b>Auto-resume if token changes</b>
+      <b>Update token in Railway and redeploy to resume</b>
     </div>
     {% endif %}
 
