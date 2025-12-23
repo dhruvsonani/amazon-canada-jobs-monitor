@@ -1,15 +1,24 @@
 from flask import Flask, render_template_string
 import json
 import os
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 app = Flask(__name__)
+
+IST = ZoneInfo("Asia/Kolkata")
 
 SLEEP_STATE_FILE = "sleep_state.json"
 REQUEST_LOG_FILE = "request_log.json"
 JOBS_FILE = "jobs_store.json"
 NEW_JOBS_FILE = "new_jobs_log.json"
+LAST_RUN_FILE = "last_run.json"
+NEXT_RUN_FILE = "next_run.json"
 
 
+# ======================
+# HELPERS
+# ======================
 def load_json(path, default):
     if not os.path.exists(path):
         return default
@@ -19,12 +28,52 @@ def load_json(path, default):
         return default
 
 
+def to_ist(iso_ts):
+    if not iso_ts:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso_ts)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(IST)
+    except Exception:
+        return None
+
+
+def human_time(dt):
+    if not dt:
+        return "N/A"
+    return dt.strftime("%d %b %Y, %I:%M:%S %p IST")
+
+
+def human_countdown(dt):
+    if not dt:
+        return "N/A"
+    diff = int((dt - datetime.now(IST)).total_seconds())
+    if diff <= 0:
+        return "due"
+    if diff < 60:
+        return f"in {diff}s"
+    if diff < 3600:
+        return f"in {diff//60} min"
+    return f"in {diff//3600} hr"
+
+
+# ======================
+# ROUTE
+# ======================
 @app.route("/")
 def dashboard():
     sleep_state = load_json(SLEEP_STATE_FILE, {})
     logs = load_json(REQUEST_LOG_FILE, [])[::-1][:100]
     jobs = load_json(JOBS_FILE, [])
     new_jobs = load_json(NEW_JOBS_FILE, [])
+
+    last_run_iso = load_json(LAST_RUN_FILE, {}).get("last_run")
+    next_run_iso = load_json(NEXT_RUN_FILE, {}).get("next_run")
+
+    last_run_ist = to_ist(last_run_iso)
+    next_run_ist = to_ist(next_run_iso)
 
     is_sleeping = sleep_state.get("sleeping", False)
 
@@ -88,15 +137,8 @@ def dashboard():
           font-size: 13px;
         }
 
-        .badge.green {
-          background: #dcfce7;
-          color: #166534;
-        }
-
-        .badge.red {
-          background: #fee2e2;
-          color: #991b1b;
-        }
+        .badge.green { background: #dcfce7; color: #166534; }
+        .badge.red   { background: #fee2e2; color: #991b1b; }
 
         .grid {
           display: grid;
@@ -121,7 +163,7 @@ def dashboard():
 
         .metric p {
           margin: 6px 0 0;
-          font-size: 22px;
+          font-size: 18px;
           font-weight: 600;
         }
 
@@ -153,10 +195,6 @@ def dashboard():
           border-bottom: 1px solid #f1f5f9;
         }
 
-        .log-row:last-child {
-          border-bottom: none;
-        }
-
         .ok { color: #15803d; font-weight: 600; }
         .err { color: #b91c1c; font-weight: 600; }
         .warn { color: #d97706; font-weight: 600; }
@@ -167,16 +205,14 @@ def dashboard():
 
       <header>
         <h1>🇨🇦 Amazon Jobs Monitor</h1>
-        <span>Railway Deployment</span>
+        <span>All times shown in IST</span>
       </header>
 
       <div class="container">
 
         <div class="status-card">
           <div>
-            <h2 style="margin:0;font-size:18px">
-              System Status
-            </h2>
+            <h2 style="margin:0;font-size:18px">System Status</h2>
             {% if is_sleeping %}
               <p style="margin:4px 0;color:#6b7280">
                 Sleeping due to 403 — redeploy to resume
@@ -195,17 +231,15 @@ def dashboard():
           {% endif %}
         </div>
 
-        {% if is_sleeping %}
-        <div class="metric" style="margin-bottom:20px">
-          <h3>Sleep Window</h3>
-          <p>
-            Since: {{ sleep_state.since }} <br>
-            Wake at: {{ sleep_state.wake_at }}
-          </p>
-        </div>
-        {% endif %}
-
         <div class="grid">
+          <div class="metric">
+            <h3>Last Run</h3>
+            <p>{{ last_run }}</p>
+          </div>
+          <div class="metric">
+            <h3>Next Run</h3>
+            <p>{{ next_run }}<br><span style="font-size:13px;color:#6b7280">{{ next_run_in }}</span></p>
+          </div>
           <div class="metric">
             <h3>Total Jobs</h3>
             <p>{{ total }}</p>
@@ -213,10 +247,6 @@ def dashboard():
           <div class="metric">
             <h3>New Jobs Logged</h3>
             <p>{{ new_count }}</p>
-          </div>
-          <div class="metric">
-            <h3>Recent Requests</h3>
-            <p>{{ logs|length }}</p>
           </div>
         </div>
 
@@ -247,11 +277,13 @@ def dashboard():
 
     return render_template_string(
         html,
-        sleep_state=sleep_state,
         is_sleeping=is_sleeping,
         total=len(jobs),
         new_count=sum(len(x.get("new", [])) for x in new_jobs),
         logs=logs,
+        last_run=human_time(last_run_ist),
+        next_run=human_time(next_run_ist),
+        next_run_in=human_countdown(next_run_ist),
     )
 
 
