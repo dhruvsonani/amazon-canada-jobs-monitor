@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, render_template_string
 import json
 import os
 from datetime import datetime
@@ -11,8 +11,6 @@ AUTH_STATE_FILE = "auth_state.json"
 REQUEST_LOG_FILE = "request_log.json"
 JOBS_FILE = "jobs_store.json"
 NEW_JOBS_FILE = "new_jobs_log.json"
-LAST_RUN_FILE = "last_run.json"
-NEXT_RUN_FILE = "next_run.json"
 
 
 def load_json(path, default):
@@ -39,19 +37,23 @@ def human_ago(ts):
 @app.route("/")
 def dashboard():
     auth = load_json(AUTH_STATE_FILE, {})
-    logs = load_json(REQUEST_LOG_FILE, [])[::-1][:100]
+    logs = load_json(REQUEST_LOG_FILE, [])[::-1][:50]
     jobs = load_json(JOBS_FILE, [])
     new_jobs = load_json(NEW_JOBS_FILE, [])
 
     html = """
     <html>
+    <head>
+      <meta http-equiv="refresh" content="10">
+    </head>
     <body style="font-family:Arial;background:#f3f3f3">
+
     {% if auth.state == 'paused' %}
     <div style="background:#ffe5e5;padding:15px;border:2px solid red">
       <h3>⛔ MONITOR PAUSED</h3>
       <div>Status: {{ auth.status }}</div>
       <div>Time: {{ auth.time }}</div>
-      <b>Update AMAZON_AUTH_TOKEN to auto-resume</b>
+      <b>Update AMAZON_AUTH_TOKEN — auto resume enabled</b>
     </div>
     {% endif %}
 
@@ -63,9 +65,10 @@ def dashboard():
     <div style="background:#fff;padding:15px;margin-top:10px">
       <h3>Request Log</h3>
       {% for r in logs %}
-        {{ r.time.split("T")[1][:8] }} - {{ r.city }} - {{ r.status }}<br>
+        {{ r.time.split("T")[1][:8] }} — {{ r.city }} — {{ r.status }}<br>
       {% endfor %}
     </div>
+
     </body>
     </html>
     """
