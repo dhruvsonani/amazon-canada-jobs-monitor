@@ -6,15 +6,20 @@ from zoneinfo import ZoneInfo
 
 app = Flask(__name__)
 
+# ======================
+# TIMEZONE
+# ======================
 IST = ZoneInfo("Asia/Kolkata")
 
+# ======================
+# FILES
+# ======================
 SLEEP_STATE_FILE = "sleep_state.json"
 REQUEST_LOG_FILE = "request_log.json"
 JOBS_FILE = "jobs_store.json"
 NEW_JOBS_FILE = "new_jobs_log.json"
 LAST_RUN_FILE = "last_run.json"
 NEXT_RUN_FILE = "next_run.json"
-
 
 # ======================
 # HELPERS
@@ -40,13 +45,20 @@ def to_ist(iso_ts):
         return None
 
 
-def human_time(dt):
+def human_dt(dt):
     if not dt:
         return "N/A"
     return dt.strftime("%d %b %Y, %I:%M:%S %p IST")
 
 
-def human_countdown(dt):
+def ist_hms(iso_ts):
+    dt = to_ist(iso_ts)
+    if not dt:
+        return "N/A"
+    return dt.strftime("%H:%M:%S")
+
+
+def countdown(dt):
     if not dt:
         return "N/A"
     diff = int((dt - datetime.now(IST)).total_seconds())
@@ -65,15 +77,12 @@ def human_countdown(dt):
 @app.route("/")
 def dashboard():
     sleep_state = load_json(SLEEP_STATE_FILE, {})
-    logs = load_json(REQUEST_LOG_FILE, [])[::-1][:100]
+    logs = load_json(REQUEST_LOG_FILE, [])[::-1][:120]
     jobs = load_json(JOBS_FILE, [])
     new_jobs = load_json(NEW_JOBS_FILE, [])
 
-    last_run_iso = load_json(LAST_RUN_FILE, {}).get("last_run")
-    next_run_iso = load_json(NEXT_RUN_FILE, {}).get("next_run")
-
-    last_run_ist = to_ist(last_run_iso)
-    next_run_ist = to_ist(next_run_iso)
+    last_run_ist = to_ist(load_json(LAST_RUN_FILE, {}).get("last_run"))
+    next_run_ist = to_ist(load_json(NEXT_RUN_FILE, {}).get("next_run"))
 
     is_sleeping = sleep_state.get("sleeping", False)
 
@@ -115,7 +124,7 @@ def dashboard():
 
         .container {
           padding: 20px;
-          max-width: 1100px;
+          max-width: 1200px;
           margin: auto;
         }
 
@@ -142,7 +151,7 @@ def dashboard():
 
         .grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
           gap: 16px;
           margin-bottom: 20px;
         }
@@ -163,7 +172,7 @@ def dashboard():
 
         .metric p {
           margin: 6px 0 0;
-          font-size: 18px;
+          font-size: 17px;
           font-weight: 600;
         }
 
@@ -182,14 +191,14 @@ def dashboard():
         }
 
         .logs {
-          max-height: 420px;
+          max-height: 460px;
           overflow-y: auto;
           font-size: 13px;
         }
 
         .log-row {
           display: grid;
-          grid-template-columns: 80px 1fr 120px;
+          grid-template-columns: 90px 1fr 110px 110px;
           gap: 10px;
           padding: 10px 16px;
           border-bottom: 1px solid #f1f5f9;
@@ -215,7 +224,7 @@ def dashboard():
             <h2 style="margin:0;font-size:18px">System Status</h2>
             {% if is_sleeping %}
               <p style="margin:4px 0;color:#6b7280">
-                Sleeping due to 403 — redeploy to resume
+                Sleeping due to 403 — redeploy Railway to resume
               </p>
             {% else %}
               <p style="margin:4px 0;color:#6b7280">
@@ -231,6 +240,16 @@ def dashboard():
           {% endif %}
         </div>
 
+        {% if is_sleeping %}
+        <div class="metric" style="margin-bottom:20px">
+          <h3>Sleep Window</h3>
+          <p>
+            Since: {{ sleep_state.since }} <br>
+            Wake at: {{ sleep_state.wake_at }}
+          </p>
+        </div>
+        {% endif %}
+
         <div class="grid">
           <div class="metric">
             <h3>Last Run</h3>
@@ -238,7 +257,8 @@ def dashboard():
           </div>
           <div class="metric">
             <h3>Next Run</h3>
-            <p>{{ next_run }}<br><span style="font-size:13px;color:#6b7280">{{ next_run_in }}</span></p>
+            <p>{{ next_run }}<br>
+            <span style="font-size:13px;color:#6b7280">{{ next_run_in }}</span></p>
           </div>
           <div class="metric">
             <h3>Total Jobs</h3>
@@ -251,11 +271,11 @@ def dashboard():
         </div>
 
         <div class="log-card">
-          <h3>Request Log</h3>
+          <h3>Request Log (IST)</h3>
           <div class="logs">
             {% for r in logs %}
             <div class="log-row">
-              <div>{{ r.time.split("T")[1][:8] }}</div>
+              <div>{{ ist_hms(r.time) }}</div>
               <div>{{ r.city }}</div>
               <div class="
                 {% if r.status == 'OK' %}ok
@@ -263,6 +283,13 @@ def dashboard():
                 {% else %}warn{% endif %}
               ">
                 {{ r.status }}
+              </div>
+              <div>
+                {% if r.latency_ms is defined %}
+                  {{ r.latency_ms }} ms
+                {% else %}
+                  —
+                {% endif %}
               </div>
             </div>
             {% endfor %}
@@ -277,13 +304,15 @@ def dashboard():
 
     return render_template_string(
         html,
+        sleep_state=sleep_state,
         is_sleeping=is_sleeping,
         total=len(jobs),
         new_count=sum(len(x.get("new", [])) for x in new_jobs),
         logs=logs,
-        last_run=human_time(last_run_ist),
-        next_run=human_time(next_run_ist),
-        next_run_in=human_countdown(next_run_ist),
+        last_run=human_dt(last_run_ist),
+        next_run=human_dt(next_run_ist),
+        next_run_in=countdown(next_run_ist),
+        ist_hms=ist_hms,
     )
 
 
