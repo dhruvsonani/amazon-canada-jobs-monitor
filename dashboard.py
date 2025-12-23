@@ -1,9 +1,12 @@
 from flask import Flask, jsonify, render_template_string
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo   # ✅ IST support
 
 app = Flask(__name__)
+
+IST = ZoneInfo("Asia/Kolkata")
 
 # ======================
 # FILES
@@ -28,48 +31,46 @@ def load_json(path, default):
         return default
 
 
+def to_ist(iso_ts):
+    """Convert ISO timestamp to IST-aware datetime"""
+    if not iso_ts:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso_ts)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+        return dt.astimezone(IST)
+    except Exception:
+        return None
+
+
 def human_ago(iso_ts):
     """
-    Convert ISO timestamp to 'X sec/min ago'
+    Convert ISO timestamp to 'X sec/min ago' (IST)
     """
-    if not iso_ts:
+    t = to_ist(iso_ts)
+    if not t:
         return "N/A"
 
-    try:
-        t = datetime.fromisoformat(iso_ts)
-        if t.tzinfo is None:
-            t = t.replace(tzinfo=timezone.utc)
+    now = datetime.now(IST)
+    seconds = int((now - t).total_seconds())
 
-        now = datetime.now(timezone.utc)
-        seconds = int((now - t).total_seconds())
-
-        if seconds < 60:
-            return f"{seconds} sec ago"
-        elif seconds < 3600:
-            return f"{seconds // 60} min ago"
-        else:
-            return f"{seconds // 3600} hr ago"
-
-    except Exception:
-        return "N/A"
+    if seconds < 60:
+        return f"{seconds} sec ago"
+    elif seconds < 3600:
+        return f"{seconds // 60} min ago"
+    else:
+        return f"{seconds // 3600} hr ago"
 
 
 def next_run_seconds():
     data = load_json(NEXT_RUN_FILE, {})
-    iso_ts = data.get("next_run")
-    if not iso_ts:
+    t = to_ist(data.get("next_run"))
+    if not t:
         return "N/A"
 
-    try:
-        t = datetime.fromisoformat(iso_ts)
-        if t.tzinfo is None:
-            t = t.replace(tzinfo=timezone.utc)
-
-        now = datetime.now(timezone.utc)
-        return max(0, int((t - now).total_seconds()))
-
-    except Exception:
-        return "N/A"
+    now = datetime.now(IST)
+    return max(0, int((t - now).total_seconds()))
 
 
 def calculate_health(request_logs, window=50):
@@ -127,7 +128,7 @@ def dashboard():
 
       <div class="card">
         <h2>🇨🇦 Amazon Jobs Monitor</h2>
-        <div><b>Last check:</b> {{ last_check }}</div>
+        <div><b>Last check (IST):</b> {{ last_check }}</div>
         <div><b>Next run in:</b> {{ next_run }} seconds</div>
         <div>
           <b>Request health:</b>
@@ -146,7 +147,7 @@ def dashboard():
       </div>
 
       <div class="card">
-        <h3>🧾 Request Status (latest)</h3>
+        <h3>🧾 API Call Request Status (IST)</h3>
         <div style="max-height:320px; overflow-y:auto;">
           <table>
             {% for r in request_logs %}
