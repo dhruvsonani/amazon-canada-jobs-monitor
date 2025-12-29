@@ -214,7 +214,6 @@ def dashboard():
 
       <header>
         <h1>🇨🇦 Amazon Jobs Monitor</h1>
-        <span>All times shown in IST</span>
       </header>
 
       <div class="container">
@@ -271,7 +270,7 @@ def dashboard():
         </div>
 
         <div class="log-card">
-          <h3>Request Log (IST)</h3>
+          <h3>Request Log</h3>
           <div class="logs">
             {% for r in logs %}
             <div class="log-row">
